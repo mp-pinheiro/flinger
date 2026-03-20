@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0
+
+- Replace ButtonItem with Field component for proper gamepad focusability
+- Add visual hierarchy with styled badges, section headers, and download items
+- Add redownload button for already-downloaded trainers
+- Improve downloaded trainer detection with helper functions
+- Style downloaded trainers with green accent in the list
+
 ## 0.4.0
 
 - Filter "My Trainers Archive" from trainer list (not actual trainer content)
