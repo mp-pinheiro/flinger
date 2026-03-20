@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0
+
+- Move browse and detail views to full-screen routed pages
+- Add pagination to browse list (5 per page) and downloads (2 per page)
+- Persist browse page position when navigating back from detail
+- Add top padding to clear Steam system bar
+- Track per-download status with trainer meta
+
 ## 0.5.0
 
 - Replace ButtonItem with Field component for proper gamepad focusability
