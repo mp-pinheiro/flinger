@@ -6,3 +6,23 @@ __pycache__/
 .env
 .idea/
 repomix*
+
+# sandbox
+.bash_profile
+.bashrc
+.profile
+.zprofile
+.zshrc
+.gitconfig
+.gitmodules
+.ripgreprc
+.claude
+.mcp.json
+.vscode
+HEAD
+config
+.idea
+/hooks
+objects
+refs
+
