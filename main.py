@@ -46,12 +46,12 @@ class TrainerListParser(HTMLParser):
             return
         attrs_dict = dict(attrs)
         href = attrs_dict.get("href", "")
-        match = re.match(r"/trainer/([\w-]+)/?", href)
+        match = re.search(r"/trainer/([\w-]+)/?$", href)
         if match:
             self._in_link = True
             self._current = {
                 "slug": match.group(1),
-                "url": BASE_URL + href,
+                "url": href if href.startswith("http") else BASE_URL + href,
                 "name": "",
             }
 
@@ -161,12 +161,15 @@ class Plugin:
                 None, _make_request, download_url, BASE_URL + "/"
             )
 
-            zip_path = dest_dir / "trainer.zip"
-            zip_path.write_bytes(data)
-
-            with zipfile.ZipFile(zip_path, "r") as zf:
-                zf.extractall(dest_dir)
-            zip_path.unlink()
+            if data[:2] == b"PK":
+                zip_path = dest_dir / "trainer.zip"
+                zip_path.write_bytes(data)
+                with zipfile.ZipFile(zip_path, "r") as zf:
+                    zf.extractall(dest_dir)
+                zip_path.unlink()
+            else:
+                exe_path = dest_dir / f"{safe_name}.exe"
+                exe_path.write_bytes(data)
 
             decky.logger.info(f"Downloaded trainer to {dest_dir}")
             return {"success": True, "path": str(dest_dir)}
