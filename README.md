@@ -2,15 +2,19 @@
 
 A [Decky Loader](https://decky.xyz/) plugin that lets you browse, search, and download [FLiNG Trainers](https://flingtrainer.com/) directly from Steam Deck Game Mode.
 
-Downloaded trainers are saved to `~/FLiNG-Trainers/` where [CheatDeck](https://github.com/JustinLlowormo/CheatDeck) can select them per-game.
+> **Note:** All trainer data and downloads are fetched exclusively from `https://flingtrainer.com`. No third-party mirrors or repackaged files are used.
+
+Downloaded trainers are saved to `~/FLiNG-Trainers/` where [CheatDeck](https://github.com/SheffeyG/CheatDeck) can select them per-game.
 
 ## Features
 
-- Browse ~724 FLiNG trainers without leaving Game Mode
-- Search with instant client-side filtering
-- View trainer details (options count, game version, last updated)
-- Download and extract trainers with one tap
-- Manage downloaded trainers (view, delete)
+- Browse & search 700+ FLiNG trainers (search persists across navigation)
+- Native D-pad navigation via Steam's Tabs component
+- View trainer details (options, version, last updated, available downloads)
+- Download and extract trainers (zip or exe)
+- "My Trainers" tab showing only downloaded trainers
+- Delete downloaded trainers with double-press guard
+- QAM panel with download count, quick navigation, and links
 
 ## Building
 
@@ -43,6 +47,6 @@ flinger/
 
 ## How It Works
 
-The Python backend fetches trainer listings from flingtrainer.com, parses HTML with stdlib `HTMLParser`, and caches results for 5 minutes. Downloads are extracted from .zip files into `~/FLiNG-Trainers/{trainer-name}/`.
+The Python backend fetches trainer listings from flingtrainer.com, parses HTML with regex-based parsing, and caches results for 5 minutes. Downloads are extracted from .zip or .exe files into `~/FLiNG-Trainers/{trainer-name}/`.
 
 The React frontend communicates with the backend via Decky's `callable` API, providing a searchable list view and a detail view with download buttons.
