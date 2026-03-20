@@ -2,6 +2,7 @@ import { callable, definePlugin, toaster } from "@decky/api";
 import {
   ButtonItem,
   DialogButton,
+  Field,
   PanelSection,
   PanelSectionRow,
   TextField,
@@ -9,7 +10,7 @@ import {
   staticClasses,
 } from "@decky/ui";
 import { useState, useEffect, useRef } from "react";
-import { FaGamepad, FaArrowLeft, FaDownload, FaTrash, FaCheck } from "react-icons/fa";
+import { FaGamepad, FaArrowLeft, FaDownload, FaTrash, FaCheck, FaRedo } from "react-icons/fa";
 
 interface Trainer {
   name: string;
@@ -39,6 +40,75 @@ const backendLog = callable<[level: string, msg: string], void>("log");
 function flog(level: string, msg: string) { backendLog(level, msg).catch(() => {}); }
 
 const PAGE_SIZE = 50;
+
+const styles = {
+  trainerName: {
+    fontWeight: 600,
+    fontSize: "14px",
+    color: "#dcdee2",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap" as const,
+    maxWidth: "280px",
+  } as React.CSSProperties,
+  badge: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "4px",
+    fontSize: "11px",
+    color: "#8bc34a",
+    background: "rgba(139,195,74,0.15)",
+    padding: "2px 8px",
+    borderRadius: "4px",
+    marginTop: "4px",
+  } as React.CSSProperties,
+  sectionHeader: {
+    fontWeight: 600,
+    fontSize: "12px",
+    color: "#8bc34a",
+    textTransform: "uppercase" as const,
+    letterSpacing: "0.5px",
+    padding: "12px 0 4px 0",
+    borderBottom: "1px solid rgba(139,195,74,0.2)",
+    marginBottom: "8px",
+  } as React.CSSProperties,
+  metadata: {
+    fontSize: "12px",
+    color: "#9ca3af",
+    padding: "4px 0",
+  } as React.CSSProperties,
+  actionRow: {
+    display: "flex",
+    gap: "8px",
+    marginTop: "12px",
+  } as React.CSSProperties,
+  downloadItem: {
+    background: "rgba(255,255,255,0.03)",
+    borderRadius: "6px",
+    padding: "10px 12px",
+    margin: "6px 0",
+    border: "1px solid rgba(255,255,255,0.08)",
+  } as React.CSSProperties,
+  filename: {
+    fontSize: "13px",
+    color: "#dcdee2",
+    fontWeight: 500,
+  } as React.CSSProperties,
+};
+
+function isTrainerDownloaded(downloaded: string[], name: string): boolean {
+  const cleanName = name.toLowerCase().replace(/ trainer$/i, "").trim();
+  return downloaded.some(
+    (d) => d.toLowerCase() === cleanName || d.toLowerCase() === name.toLowerCase().trim()
+  );
+}
+
+function getDownloadedMatch(downloaded: string[], name: string): string | undefined {
+  const cleanName = name.toLowerCase().replace(/ trainer$/i, "").trim();
+  return downloaded.find(
+    (d) => d.toLowerCase() === cleanName || d.toLowerCase() === name.toLowerCase().trim()
+  );
+}
 
 function Content() {
   const [view, setView] = useState<"list" | "detail">("list");
@@ -153,6 +223,9 @@ function Content() {
   const visible = filtered.slice(0, visibleCount);
 
   if (view === "detail") {
+    const isDownloaded = isTrainerDownloaded(downloaded, selectedName);
+    const downloadedMatch = getDownloadedMatch(downloaded, selectedName);
+
     return (
       <PanelSection>
         <PanelSectionRow>
@@ -162,9 +235,14 @@ function Content() {
         </PanelSectionRow>
 
         <PanelSectionRow>
-          <div style={{ fontWeight: "bold", fontSize: "14px", padding: "4px 0" }}>
+          <div style={{ ...styles.trainerName, fontSize: "16px", maxWidth: "100%" }}>
             {selectedName}
           </div>
+          {isDownloaded && (
+            <div style={styles.badge}>
+              <FaCheck size={10} /> Downloaded
+            </div>
+          )}
         </PanelSectionRow>
 
         {detailLoading ? (
@@ -173,42 +251,59 @@ function Content() {
           <>
             {details.options && (
               <PanelSectionRow>
-                <div style={{ fontSize: "12px", opacity: 0.8, padding: "2px 0" }}>
-                  {details.options} Options &middot; {details.game_version} &middot; Updated {details.last_updated}
+                <div style={styles.metadata}>
+                  {details.options} Options · {details.game_version} · Updated {details.last_updated}
                 </div>
               </PanelSectionRow>
             )}
 
-            {details.downloads.map((dl) => (
-              <PanelSectionRow key={dl.url}>
-                <ButtonItem
-                  label={dl.filename}
-                  onClick={() => handleDownload(dl)}
-                  disabled={downloading !== null}
-                >
-                  {downloading === dl.url ? (
-                    <span>Downloading...</span>
-                  ) : (
-                    <FaDownload />
-                  )}
-                </ButtonItem>
-              </PanelSectionRow>
-            ))}
+            <div style={styles.sectionHeader}>Downloads</div>
 
-            {downloaded.some((d) => d.toLowerCase().includes(selectedName.toLowerCase().replace(/ trainer$/i, "").trim())) && (
-              <PanelSectionRow>
-                <ButtonItem
-                  label="Delete downloaded trainer"
-                  onClick={() => {
-                    const match = downloaded.find((d) =>
-                      d.toLowerCase().includes(selectedName.toLowerCase().replace(/ trainer$/i, "").trim())
-                    );
-                    if (match) handleDelete(match);
-                  }}
-                >
-                  <FaTrash />
-                </ButtonItem>
-              </PanelSectionRow>
+            {details.downloads.map((dl) => {
+              const isDownloading = downloading === dl.url;
+              return (
+                <PanelSectionRow key={dl.url}>
+                  <div style={styles.downloadItem}>
+                    <div style={styles.filename}>{dl.filename}</div>
+                    <div style={styles.actionRow}>
+                      <DialogButton
+                        onClick={() => handleDownload(dl)}
+                        disabled={downloading !== null}
+                        style={{ flex: 1 }}
+                      >
+                        {isDownloading ? (
+                          <>
+                            <SteamSpinner />
+                          </>
+                        ) : isDownloaded ? (
+                          <>
+                            <FaRedo /> Redownload
+                          </>
+                        ) : (
+                          <>
+                            <FaDownload /> Download
+                          </>
+                        )}
+                      </DialogButton>
+                    </div>
+                  </div>
+                </PanelSectionRow>
+              );
+            })}
+
+            {downloadedMatch && (
+              <>
+                <div style={styles.sectionHeader}>Actions</div>
+                <PanelSectionRow>
+                  <ButtonItem
+                    label="Delete Trainer"
+                    description={`Remove ${downloadedMatch} from your system`}
+                    onClick={() => handleDelete(downloadedMatch)}
+                  >
+                    <FaTrash />
+                  </ButtonItem>
+                </PanelSectionRow>
+              </>
             )}
           </>
         ) : null}
@@ -247,19 +342,20 @@ function Content() {
           </PanelSectionRow>
 
           {visible.map((t) => {
-            const isDownloaded = downloaded.some(
-              (d) => d.toLowerCase() === t.name.toLowerCase().replace(/ trainer$/i, "").trim().toLowerCase()
-                  || d.toLowerCase() === t.name.toLowerCase().trim().toLowerCase()
-            );
+            const isDownloaded = isTrainerDownloaded(downloaded, t.name);
             return (
               <PanelSectionRow key={t.slug}>
-                <ButtonItem
+                <Field
                   label={t.name}
                   description={isDownloaded ? "Downloaded" : undefined}
+                  highlightOnFocus
+                  focusable
                   onClick={() => openDetail(t)}
+                  bottomSeparator="none"
+                  style={isDownloaded ? { background: "rgba(139,195,74,0.08)" } : undefined}
                 >
-                  {isDownloaded ? <FaCheck /> : null}
-                </ButtonItem>
+                  {isDownloaded && <FaCheck style={{ color: "#8bc34a" }} />}
+                </Field>
               </PanelSectionRow>
             );
           })}
