@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.0
+
+- Filter "My Trainers Archive" from trainer list (not actual trainer content)
+
 ## 0.3.0
 
 - Fix SSL certificate verification using certifi instead of hardcoded CA paths

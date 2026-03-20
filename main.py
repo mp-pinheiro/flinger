@@ -4,6 +4,7 @@ import ssl
 import time
 import shutil
 import asyncio
+import logging
 import zipfile
 import traceback
 import urllib.request
@@ -44,7 +45,7 @@ def _parse_trainer_list(html_text):
     ):
         href, slug, name = match.group(1), match.group(2), match.group(3)
         name = re.sub(r"<[^>]+>", "", name).strip()
-        if not name:
+        if not name or "archive" in name.lower():
             continue
         url = href if href.startswith("http") else BASE_URL + href
         trainers.append({"slug": slug, "url": url, "name": name})
@@ -172,6 +173,11 @@ class Plugin:
 
     async def _main(self):
         TRAINERS_DIR.mkdir(parents=True, exist_ok=True)
+        handler = logging.FileHandler(
+            os.path.join(decky.DECKY_PLUGIN_LOG_DIR, "plugin.log"), mode="w"
+        )
+        handler.setFormatter(logging.Formatter("[%(asctime)s][%(levelname)s]: %(message)s"))
+        decky.logger.addHandler(handler)
         decky.logger.info("Flinger loaded")
 
     async def _unload(self):

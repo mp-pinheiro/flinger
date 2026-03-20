@@ -38,10 +38,7 @@ def test_get_trainers():
 
 def _pick_trainer():
     trainers = run(p.get_trainers())
-    for t in trainers:
-        if "archive" not in t["slug"]:
-            return t
-    return trainers[1]
+    return trainers[0]
 
 
 def test_get_trainer_details():
