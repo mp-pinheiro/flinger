@@ -1,0 +1,11 @@
+{
+  "name": "Flinger",
+  "author": "matheus",
+  "flags": [],
+  "api_version": 1,
+  "publish": {
+    "tags": ["trainer", "fling", "cheat"],
+    "description": "Browse and download FLiNG trainers from Game Mode",
+    "image": ""
+  }
+}
