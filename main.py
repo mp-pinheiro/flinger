@@ -1,5 +1,6 @@
 import os
 import re
+import ssl
 import time
 import shutil
 import asyncio
@@ -8,6 +9,7 @@ import traceback
 import urllib.request
 from pathlib import Path
 
+import certifi
 import decky
 
 TRAINERS_DIR = Path(os.path.expanduser("~/FLiNG-Trainers"))
@@ -19,13 +21,15 @@ USER_AGENT = (
 )
 CACHE_TTL = 300
 
+_SSL_CTX = ssl.create_default_context(cafile=certifi.where())
+
 
 def _make_request(url, referer=None):
     headers = {"User-Agent": USER_AGENT}
     if referer:
         headers["Referer"] = referer
     req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req, timeout=30) as resp:
+    with urllib.request.urlopen(req, timeout=30, context=_SSL_CTX) as resp:
         return resp.read()
 
 

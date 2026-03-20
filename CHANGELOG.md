@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.0
+
+- Fix SSL certificate verification using certifi instead of hardcoded CA paths
+
 ## 0.2.0
 
 - Fix html.parser import removed (unavailable in Decky sandbox), replaced with regex-based parsing
