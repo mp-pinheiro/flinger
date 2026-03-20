@@ -1,12 +1,11 @@
 import os
 import re
 import time
-import json
 import shutil
 import asyncio
 import zipfile
+import traceback
 import urllib.request
-from html.parser import HTMLParser
 from pathlib import Path
 
 import decky
@@ -34,85 +33,49 @@ def _sanitize_name(name):
     return re.sub(r'[<>:"/\\|?*]', "", name).strip()
 
 
-class TrainerListParser(HTMLParser):
-    def __init__(self):
-        super().__init__()
-        self.trainers = []
-        self._in_link = False
-        self._current = None
-
-    def handle_starttag(self, tag, attrs):
-        if tag != "a":
-            return
-        attrs_dict = dict(attrs)
-        href = attrs_dict.get("href", "")
-        match = re.search(r"/trainer/([\w-]+)/?$", href)
-        if match:
-            self._in_link = True
-            self._current = {
-                "slug": match.group(1),
-                "url": href if href.startswith("http") else BASE_URL + href,
-                "name": "",
-            }
-
-    def handle_data(self, data):
-        if self._in_link and self._current is not None:
-            self._current["name"] += data
-
-    def handle_endtag(self, tag):
-        if tag == "a" and self._in_link:
-            self._in_link = False
-            if self._current and self._current["name"].strip():
-                self._current["name"] = self._current["name"].strip()
-                self.trainers.append(self._current)
-            self._current = None
+def _parse_trainer_list(html_text):
+    trainers = []
+    for match in re.finditer(
+        r'<a[^>]*href="([^"]*?/trainer/([\w-]+)/?)"[^>]*>(.*?)</a>', html_text, re.DOTALL
+    ):
+        href, slug, name = match.group(1), match.group(2), match.group(3)
+        name = re.sub(r"<[^>]+>", "", name).strip()
+        if not name:
+            continue
+        url = href if href.startswith("http") else BASE_URL + href
+        trainers.append({"slug": slug, "url": url, "name": name})
+    return trainers
 
 
-class TrainerDetailParser(HTMLParser):
-    def __init__(self):
-        super().__init__()
-        self.downloads = []
-        self.metadata_text = ""
-        self._capture_text = False
-        self._all_text = []
-        self._in_attachment = False
-        self._current_download = None
+def _parse_trainer_details(html_text):
+    downloads = []
+    for match in re.finditer(
+        r'<a[^>]*\bclass="[^"]*attachment-link[^"]*"[^>]*>(.*?)</a>',
+        html_text,
+        re.DOTALL,
+    ):
+        tag = match.group(0)
+        href = re.search(r'href="([^"]+)"', tag)
+        if not href:
+            continue
+        filename = re.sub(r"<[^>]+>", "", match.group(1)).strip()
+        if filename:
+            downloads.append({"url": href.group(1), "filename": filename})
 
-    def handle_starttag(self, tag, attrs):
-        if tag == "a":
-            attrs_dict = dict(attrs)
-            cls = attrs_dict.get("class", "")
-            href = attrs_dict.get("href", "")
-            if "attachment-link" in cls and href:
-                self._in_attachment = True
-                self._current_download = {"url": href, "filename": ""}
+    meta = {"options": "", "game_version": "", "last_updated": ""}
+    text = re.sub(r"<[^>]+>", " ", html_text)
+    m = re.search(
+        r"(\d+)\s*Options?\s*[·•]\s*Game\s*Version:\s*([^·•]+)[·•]\s*Last\s*Updated:\s*([\d.]+)",
+        text,
+    )
+    if m:
+        meta = {
+            "options": m.group(1),
+            "game_version": m.group(2).strip(),
+            "last_updated": m.group(3).strip(),
+        }
 
-    def handle_data(self, data):
-        self._all_text.append(data)
-        if self._in_attachment and self._current_download is not None:
-            self._current_download["filename"] += data
-
-    def handle_endtag(self, tag):
-        if tag == "a" and self._in_attachment:
-            self._in_attachment = False
-            if self._current_download and self._current_download["filename"].strip():
-                self._current_download["filename"] = self._current_download["filename"].strip()
-                self.downloads.append(self._current_download)
-            self._current_download = None
-
-    def get_metadata(self):
-        full_text = " ".join(self._all_text)
-        match = re.search(
-            r"(\d+)\s*Options?\s*[·•]\s*Game\s*Version:\s*([^·•]+)[·•]\s*Last\s*Updated:\s*([\d.]+)",
-            full_text,
-        )
-        if match:
-            return {
-                "options": match.group(1),
-                "game_version": match.group(2).strip(),
-                "last_updated": match.group(3).strip(),
-            }
-        return {"options": "", "game_version": "", "last_updated": ""}
+    return downloads, meta
 
 
 class Plugin:
@@ -124,31 +87,41 @@ class Plugin:
         if self.trainer_cache and (now - self.cache_timestamp) < CACHE_TTL:
             return self.trainer_cache
 
-        loop = asyncio.get_event_loop()
-        html = await loop.run_in_executor(
-            None, _make_request, BASE_URL + "/all-trainers/"
-        )
-        parser = TrainerListParser()
-        parser.feed(html.decode("utf-8", errors="replace"))
-        self.trainer_cache = parser.trainers
-        self.cache_timestamp = time.time()
-        decky.logger.info(f"Cached {len(self.trainer_cache)} trainers")
-        return self.trainer_cache
+        try:
+            decky.logger.info("Fetching trainer list from %s", BASE_URL)
+            html = await asyncio.get_event_loop().run_in_executor(
+                None, _make_request, BASE_URL + "/all-trainers/"
+            )
+            decoded = html.decode("utf-8", errors="replace")
+            decky.logger.info("Received %d bytes, parsing", len(html))
+            self.trainer_cache = _parse_trainer_list(decoded)
+            self.cache_timestamp = time.time()
+            decky.logger.info("Cached %d trainers", len(self.trainer_cache))
+            return self.trainer_cache
+        except Exception as e:
+            decky.logger.error("get_trainers failed: %s\n%s", e, traceback.format_exc())
+            raise
 
     async def get_trainer_details(self, slug):
         url = f"{BASE_URL}/trainer/{slug}/"
-        loop = asyncio.get_event_loop()
-        html = await loop.run_in_executor(None, _make_request, url)
-        parser = TrainerDetailParser()
-        parser.feed(html.decode("utf-8", errors="replace"))
-        meta = parser.get_metadata()
-        return {
-            "name": slug,
-            "options": meta["options"],
-            "game_version": meta["game_version"],
-            "last_updated": meta["last_updated"],
-            "downloads": parser.downloads,
-        }
+        try:
+            html = await asyncio.get_event_loop().run_in_executor(None, _make_request, url)
+            downloads, meta = _parse_trainer_details(html.decode("utf-8", errors="replace"))
+            decky.logger.info("Details for %s: %d downloads", slug, len(downloads))
+            return {
+                "name": slug,
+                "options": meta["options"],
+                "game_version": meta["game_version"],
+                "last_updated": meta["last_updated"],
+                "downloads": downloads,
+            }
+        except Exception as e:
+            decky.logger.error("get_trainer_details(%s) failed: %s\n%s", slug, e, traceback.format_exc())
+            raise
+
+    async def log(self, level, msg):
+        fn = getattr(decky.logger, level, decky.logger.info)
+        fn("[frontend] %s", msg)
 
     async def download_trainer(self, slug, name, download_url):
         try:
@@ -156,8 +129,7 @@ class Plugin:
             dest_dir = TRAINERS_DIR / safe_name
             dest_dir.mkdir(parents=True, exist_ok=True)
 
-            loop = asyncio.get_event_loop()
-            data = await loop.run_in_executor(
+            data = await asyncio.get_event_loop().run_in_executor(
                 None, _make_request, download_url, BASE_URL + "/"
             )
 
@@ -174,7 +146,7 @@ class Plugin:
             decky.logger.info(f"Downloaded trainer to {dest_dir}")
             return {"success": True, "path": str(dest_dir)}
         except Exception as e:
-            decky.logger.error(f"Download failed: {e}")
+            decky.logger.error("Download failed: %s\n%s", e, traceback.format_exc())
             return {"success": False, "error": str(e)}
 
     async def get_downloaded_trainers(self):
@@ -191,7 +163,7 @@ class Plugin:
                 return {"success": True}
             return {"success": False, "error": "Not found"}
         except Exception as e:
-            decky.logger.error(f"Delete failed: {e}")
+            decky.logger.error("Delete failed: %s\n%s", e, traceback.format_exc())
             return {"success": False, "error": str(e)}
 
     async def _main(self):

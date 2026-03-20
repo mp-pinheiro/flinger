@@ -3,6 +3,7 @@
   "author": "matheus",
   "flags": [],
   "api_version": 1,
+  "main": "main.py",
   "publish": {
     "tags": ["trainer", "fling", "cheat"],
     "description": "Browse and download FLiNG trainers from Game Mode",

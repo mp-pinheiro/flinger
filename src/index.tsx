@@ -35,6 +35,8 @@ const getTrainerDetails = callable<[slug: string], TrainerDetails>("get_trainer_
 const downloadTrainer = callable<[slug: string, name: string, download_url: string], { success: boolean; path?: string; error?: string }>("download_trainer");
 const getDownloadedTrainers = callable<[], string[]>("get_downloaded_trainers");
 const deleteTrainer = callable<[name: string], { success: boolean; error?: string }>("delete_trainer");
+const backendLog = callable<[level: string, msg: string], void>("log");
+function flog(level: string, msg: string) { backendLog(level, msg).catch(() => {}); }
 
 const PAGE_SIZE = 50;
 
@@ -74,12 +76,16 @@ function Content() {
   async function loadTrainers() {
     setLoading(true);
     setError("");
+    flog("info", "Loading trainer list");
     try {
       const [list, dl] = await Promise.all([getTrainers(), getDownloadedTrainers()]);
       setTrainers(list);
       setDownloaded(dl);
+      flog("info", `Loaded ${list.length} trainers, ${dl.length} downloaded`);
     } catch (e: any) {
-      setError(e?.message || "Failed to load trainers");
+      const msg = e?.message || "Failed to load trainers";
+      flog("error", `loadTrainers failed: ${msg}`);
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -95,6 +101,7 @@ function Content() {
       const d = await getTrainerDetails(trainer.slug);
       setDetails(d);
     } catch (e: any) {
+      flog("error", `openDetail(${trainer.slug}) failed: ${e?.message}`);
       toaster.toast({ title: "Error", body: e?.message || "Failed to load details" });
       setView("list");
     } finally {
@@ -104,16 +111,20 @@ function Content() {
 
   async function handleDownload(dl: Download) {
     setDownloading(dl.url);
+    flog("info", `Downloading ${dl.filename} for ${selectedSlug}`);
     try {
       const result = await downloadTrainer(selectedSlug, selectedName, dl.url);
       if (result.success) {
+        flog("info", `Downloaded ${selectedName} to ${result.path}`);
         toaster.toast({ title: "Downloaded", body: `${selectedName} ready` });
         const dl2 = await getDownloadedTrainers();
         setDownloaded(dl2);
       } else {
+        flog("error", `Download failed: ${result.error}`);
         toaster.toast({ title: "Download Failed", body: result.error || "Unknown error" });
       }
     } catch (e: any) {
+      flog("error", `handleDownload exception: ${e?.message}`);
       toaster.toast({ title: "Download Failed", body: e?.message || "Unknown error" });
     } finally {
       setDownloading(null);

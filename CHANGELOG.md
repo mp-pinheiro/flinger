@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0
+
+- Fix html.parser import removed (unavailable in Decky sandbox), replaced with regex-based parsing
+- Fix download link regex to be attribute-order independent (was returning 0 downloads)
+- Add make logs target reading plugin.log directly
+- Add frontend log() callable routing frontend events to plugin.log
+- Add full traceback logging on all backend errors
+
 ## 0.1.0
 
 - Fix trainer list parser for absolute URLs
