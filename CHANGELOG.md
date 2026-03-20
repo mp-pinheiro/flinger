@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.0
+
+- Fix Y button (not X) triggering search focus on browse tab
+- Add deleting state guard to prevent double-press on delete in TrainerDetail and MyTrainerDetail
+- Redesign About section: drop Field columnar layout, use full-width Focusable blocks with DialogButton links
+- Add version footer to About tabs and QAM panel
+- Add About section to QAM panel with CheatDeck and GitHub links via NavigateToExternalWeb
+- Fix GitHub buttons in About not reachable (DialogButton was nested inside onActivate Focusable)
+
 ## 0.7.0
 
 - Use Tabs component for native Steam scroll on browse and detail pages
