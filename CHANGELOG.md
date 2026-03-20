@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.0
+
+- Use Tabs component for native Steam scroll on browse and detail pages
+- Remove pagination, render full trainer list with native dpad scrolling
+- Move downloaded badge and delete button inline per download item
+- Remove separate Actions section from trainer detail
+
 ## 0.6.0
 
 - Move browse and detail views to full-screen routed pages

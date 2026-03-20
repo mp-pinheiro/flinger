@@ -9,6 +9,7 @@ import {
   PanelSectionRow,
   TextField,
   SteamSpinner,
+  Tabs,
   staticClasses,
 } from "@decky/ui";
 import { useState, useEffect, useRef } from "react";
@@ -43,10 +44,6 @@ const backendLog = callable<[level: string, msg: string], void>("log");
 function flog(level: string, msg: string) { backendLog(level, msg).catch(() => {}); }
 
 let selectedTrainer: Trainer | null = null;
-let savedPage = 0;
-
-const PAGE_SIZE = 5;
-const DETAIL_PAGE_SIZE = 2;
 
 const styles = {
   trainerName: {
@@ -99,8 +96,13 @@ const styles = {
     fontWeight: 500,
     wordBreak: "break-word" as const,
   } as React.CSSProperties,
-  page: {
-    padding: "56px 28px 16px 28px",
+  pageOuter: {
+    marginTop: "40px",
+    height: "calc(100% - 40px)",
+    background: "#0005",
+  } as React.CSSProperties,
+  tabContent: {
+    padding: "16px 28px",
     color: "#dcdee2",
   } as React.CSSProperties,
 };
@@ -108,13 +110,6 @@ const styles = {
 function isTrainerDownloaded(downloaded: string[], name: string): boolean {
   const cleanName = name.toLowerCase().replace(/ trainer$/i, "").trim();
   return downloaded.some(
-    (d) => d.toLowerCase() === cleanName || d.toLowerCase() === name.toLowerCase().trim()
-  );
-}
-
-function getDownloadedMatch(downloaded: string[], name: string): string | undefined {
-  const cleanName = name.toLowerCase().replace(/ trainer$/i, "").trim();
-  return downloaded.find(
     (d) => d.toLowerCase() === cleanName || d.toLowerCase() === name.toLowerCase().trim()
   );
 }
@@ -153,15 +148,10 @@ function TrainerBrowser() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [currentPage, setCurrentPage] = useState(savedPage);
   const [downloaded, setDownloaded] = useState<string[]>([]);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [debouncedSearch, setDebouncedSearch] = useState("");
-
-  useEffect(() => {
-    savedPage = currentPage;
-  }, [currentPage]);
 
   useEffect(() => {
     loadTrainers();
@@ -171,7 +161,6 @@ function TrainerBrowser() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       setDebouncedSearch(search);
-      setCurrentPage(0);
     }, 200);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -205,78 +194,61 @@ function TrainerBrowser() {
   const filtered = debouncedSearch
     ? trainers.filter((t) => t.name.toLowerCase().includes(lowerSearch))
     : trainers;
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const safePage = Math.min(currentPage, totalPages - 1);
-  const visible = filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
 
   return (
-    <div style={styles.page}>
-      <Focusable onCancelButton={() => Navigation.NavigateBack()}>
-        <div style={{ fontSize: "20px", fontWeight: 600, marginBottom: "12px" }}>
-          Flinger
-        </div>
-        <TextField
-          label="Search trainers"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          bShowClearAction
-        />
+    <div style={styles.pageOuter}>
+      <Tabs
+        activeTab="browse"
+        onShowTab={() => {}}
+        tabs={[{
+          id: "browse",
+          title: "Flinger",
+          content: (
+            <div style={styles.tabContent}>
+              <Focusable onCancelButton={() => Navigation.NavigateBack()}>
+                <TextField
+                  label="Search trainers"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  bShowClearAction
+                />
 
-        {loading ? (
-          <SteamSpinner />
-        ) : error ? (
-          <div>
-            <div style={{ color: "#ff4444", padding: "8px 0" }}>{error}</div>
-            <DialogButton onClick={loadTrainers}>Retry</DialogButton>
-          </div>
-        ) : (
-          <>
-            <div style={{ fontSize: "12px", opacity: 0.6, padding: "8px 0" }}>
-              {filtered.length} trainers{debouncedSearch ? " found" : ""}
+                {loading ? (
+                  <SteamSpinner />
+                ) : error ? (
+                  <div>
+                    <div style={{ color: "#ff4444", padding: "8px 0" }}>{error}</div>
+                    <DialogButton onClick={loadTrainers}>Retry</DialogButton>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ fontSize: "12px", opacity: 0.6, padding: "8px 0" }}>
+                      {filtered.length} trainers{debouncedSearch ? " found" : ""}
+                    </div>
+
+                    {filtered.map((t) => {
+                      const isDl = isTrainerDownloaded(downloaded, t.name);
+                      return (
+                        <Field
+                          key={t.slug}
+                          label={t.name}
+                          highlightOnFocus
+                          focusable
+                          onClick={() => openDetail(t)}
+                          bottomSeparator="none"
+                          style={isDl ? { background: "rgba(139,195,74,0.08)" } : undefined}
+                        >
+                          {isDl && <FaCheck style={{ color: "#8bc34a" }} />}
+                        </Field>
+                      );
+                    })}
+                  </>
+                )}
+              </Focusable>
             </div>
-
-            {visible.map((t) => {
-              const isDl = isTrainerDownloaded(downloaded, t.name);
-              return (
-                <Field
-                  key={t.slug}
-                  label={t.name}
-                  description={isDl ? "Downloaded" : undefined}
-                  highlightOnFocus
-                  focusable
-                  onClick={() => openDetail(t)}
-                  bottomSeparator="none"
-                  style={isDl ? { background: "rgba(139,195,74,0.08)" } : undefined}
-                >
-                  {isDl && <FaCheck style={{ color: "#8bc34a" }} />}
-                </Field>
-              );
-            })}
-
-            {totalPages > 1 && (
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "12px" }}>
-                <DialogButton
-                  onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
-                  disabled={safePage === 0}
-                  style={{ flex: 1 }}
-                >
-                  Prev
-                </DialogButton>
-                <div style={{ fontSize: "12px", color: "#9ca3af", whiteSpace: "nowrap" }}>
-                  {safePage + 1} / {totalPages}
-                </div>
-                <DialogButton
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages - 1, p + 1))}
-                  disabled={safePage >= totalPages - 1}
-                  style={{ flex: 1 }}
-                >
-                  Next
-                </DialogButton>
-              </div>
-            )}
-          </>
-        )}
-      </Focusable>
+          ),
+        }]}
+      />
     </div>
   );
 }
@@ -288,7 +260,6 @@ function TrainerDetail() {
   const [downloading, setDownloading] = useState<string | null>(null);
   const [downloadedUrls, setDownloadedUrls] = useState<string[]>([]);
   const [downloaded, setDownloaded] = useState<string[]>([]);
-  const [detailPage, setDetailPage] = useState(0);
 
   useEffect(() => {
     if (!trainer) return;
@@ -360,123 +331,91 @@ function TrainerDetail() {
 
   if (!trainer) {
     return (
-      <div style={styles.page}>
-        <div style={{ color: "#ff4444" }}>No trainer selected</div>
+      <div style={styles.pageOuter}>
+        <div style={styles.tabContent}>
+          <div style={{ color: "#ff4444" }}>No trainer selected</div>
+        </div>
       </div>
     );
   }
 
-  const isDownloaded = isTrainerDownloaded(downloaded, trainer.name);
-  const downloadedMatch = getDownloadedMatch(downloaded, trainer.name);
-
   return (
-    <div style={styles.page}>
-      <Focusable onCancelButton={() => Navigation.NavigateBack()}>
-        <DialogButton
-          onClick={() => Navigation.NavigateBack()}
-          style={{ marginBottom: "12px", width: "auto", display: "inline-flex", alignItems: "center", gap: "8px" }}
-        >
-          <FaArrowLeft /> Back
-        </DialogButton>
-
-        <div style={{ ...styles.trainerName, fontSize: "18px", marginBottom: "4px" }}>
-          {trainer.name}
-        </div>
-        {isDownloaded && (
-          <div style={styles.badge}>
-            <FaCheck size={10} /> Downloaded
-          </div>
-        )}
-
-        {detailLoading ? (
-          <SteamSpinner />
-        ) : details ? (
-          <>
-            {details.options && (
-              <div style={{ ...styles.metadata, marginTop: "8px" }}>
-                {details.options} Options · {details.game_version} · Updated {details.last_updated}
-              </div>
-            )}
-
-            <div style={styles.sectionHeader}>Downloads</div>
-
-            {(() => {
-              const totalDetailPages = Math.max(1, Math.ceil(details.downloads.length / DETAIL_PAGE_SIZE));
-              const safeDetailPage = Math.min(detailPage, totalDetailPages - 1);
-              const visibleDownloads = details.downloads.slice(
-                safeDetailPage * DETAIL_PAGE_SIZE,
-                (safeDetailPage + 1) * DETAIL_PAGE_SIZE
-              );
-              return (
-                <>
-                  {visibleDownloads.map((dl) => {
-                    const isDownloading = downloading === dl.url;
-                    const isThisDownloaded = downloadedUrls.includes(dl.url);
-                    return (
-                      <div key={dl.url} style={styles.downloadItem}>
-                        <div style={styles.filename}>{dl.filename}</div>
-                        <div style={styles.actionRow}>
-                          <DialogButton
-                            onClick={() => handleDownload(dl)}
-                            disabled={downloading !== null}
-                            style={{ flex: 1 }}
-                          >
-                            {isDownloading ? (
-                              <SteamSpinner />
-                            ) : isThisDownloaded ? (
-                              <>
-                                <FaRedo /> Redownload
-                              </>
-                            ) : (
-                              <>
-                                <FaDownload /> Download
-                              </>
-                            )}
-                          </DialogButton>
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {totalDetailPages > 1 && (
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "12px" }}>
-                      <DialogButton
-                        onClick={() => setDetailPage((p) => Math.max(0, p - 1))}
-                        disabled={safeDetailPage === 0}
-                        style={{ flex: 1 }}
-                      >
-                        Prev
-                      </DialogButton>
-                      <div style={{ fontSize: "12px", color: "#9ca3af", whiteSpace: "nowrap" }}>
-                        {safeDetailPage + 1} / {totalDetailPages}
-                      </div>
-                      <DialogButton
-                        onClick={() => setDetailPage((p) => Math.min(totalDetailPages - 1, p + 1))}
-                        disabled={safeDetailPage >= totalDetailPages - 1}
-                        style={{ flex: 1 }}
-                      >
-                        Next
-                      </DialogButton>
-                    </div>
-                  )}
-                </>
-              );
-            })()}
-
-            {downloadedMatch && (
-              <>
-                <div style={styles.sectionHeader}>Actions</div>
-                <ButtonItem
-                  label="Delete Trainer"
-                  description={`Remove ${downloadedMatch} from your system`}
-                  onClick={() => handleDelete(downloadedMatch)}
+    <div style={styles.pageOuter}>
+      <Tabs
+        activeTab="detail"
+        onShowTab={() => {}}
+        tabs={[{
+          id: "detail",
+          title: trainer.name,
+          content: (
+            <div style={styles.tabContent}>
+              <Focusable onCancelButton={() => Navigation.NavigateBack()}>
+                <DialogButton
+                  onClick={() => Navigation.NavigateBack()}
+                  style={{ marginBottom: "12px", width: "auto", display: "inline-flex", alignItems: "center", gap: "8px" }}
                 >
-                  <FaTrash />
-                </ButtonItem>
-              </>
-            )}
-          </>
-        ) : null}
-      </Focusable>
+                  <FaArrowLeft /> Back
+                </DialogButton>
+
+                {detailLoading ? (
+                  <SteamSpinner />
+                ) : details ? (
+                  <>
+                    {details.options && (
+                      <div style={{ ...styles.metadata, marginTop: "8px" }}>
+                        {details.options} Options · {details.game_version} · Updated {details.last_updated}
+                      </div>
+                    )}
+
+                    <div style={styles.sectionHeader}>Downloads</div>
+
+                    {details.downloads.map((dl) => {
+                      const isDownloading = downloading === dl.url;
+                      const isThisDownloaded = downloadedUrls.includes(dl.url);
+                      return (
+                        <div key={dl.url} style={styles.downloadItem}>
+                          <div style={styles.filename}>{dl.filename}</div>
+                          {isThisDownloaded && (
+                            <div style={styles.badge}><FaCheck size={10} /> Downloaded</div>
+                          )}
+                          <div style={styles.actionRow}>
+                            <DialogButton
+                              onClick={() => handleDownload(dl)}
+                              disabled={downloading !== null}
+                              style={{ flex: 1 }}
+                            >
+                              {isDownloading ? (
+                                <SteamSpinner />
+                              ) : isThisDownloaded ? (
+                                <>
+                                  <FaRedo /> Redownload
+                                </>
+                              ) : (
+                                <>
+                                  <FaDownload /> Download
+                                </>
+                              )}
+                            </DialogButton>
+                            {isThisDownloaded && (
+                              <DialogButton
+                                onClick={() => handleDelete(trainer.name)}
+                                disabled={downloading !== null}
+                                style={{ flex: "none", minWidth: "auto", padding: "0 12px" }}
+                              >
+                                <FaTrash />
+                              </DialogButton>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </>
+                ) : null}
+              </Focusable>
+            </div>
+          ),
+        }]}
+      />
     </div>
   );
 }
