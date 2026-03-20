@@ -1,6 +1,8 @@
 import os
 import re
 import ssl
+import html
+import json
 import time
 import shutil
 import asyncio
@@ -40,15 +42,18 @@ def _sanitize_name(name):
 
 def _parse_trainer_list(html_text):
     trainers = []
+    seen = set()
     for match in re.finditer(
         r'<a[^>]*href="([^"]*?/trainer/([\w-]+)/?)"[^>]*>(.*?)</a>', html_text, re.DOTALL
     ):
         href, slug, name = match.group(1), match.group(2), match.group(3)
-        name = re.sub(r"<[^>]+>", "", name).strip()
-        if not name or "archive" in name.lower():
+        name = html.unescape(re.sub(r"<[^>]+>", "", name).strip())
+        if not name or "archive" in name.lower() or slug in seen:
             continue
+        seen.add(slug)
         url = href if href.startswith("http") else BASE_URL + href
         trainers.append({"slug": slug, "url": url, "name": name})
+    trainers.sort(key=lambda t: t["name"].lower())
     return trainers
 
 
@@ -94,11 +99,11 @@ class Plugin:
 
         try:
             decky.logger.info("Fetching trainer list from %s", BASE_URL)
-            html = await asyncio.get_event_loop().run_in_executor(
+            raw = await asyncio.get_event_loop().run_in_executor(
                 None, _make_request, BASE_URL + "/all-trainers/"
             )
-            decoded = html.decode("utf-8", errors="replace")
-            decky.logger.info("Received %d bytes, parsing", len(html))
+            decoded = raw.decode("utf-8", errors="replace")
+            decky.logger.info("Received %d bytes, parsing", len(raw))
             self.trainer_cache = _parse_trainer_list(decoded)
             self.cache_timestamp = time.time()
             decky.logger.info("Cached %d trainers", len(self.trainer_cache))
@@ -110,8 +115,8 @@ class Plugin:
     async def get_trainer_details(self, slug):
         url = f"{BASE_URL}/trainer/{slug}/"
         try:
-            html = await asyncio.get_event_loop().run_in_executor(None, _make_request, url)
-            downloads, meta = _parse_trainer_details(html.decode("utf-8", errors="replace"))
+            raw = await asyncio.get_event_loop().run_in_executor(None, _make_request, url)
+            downloads, meta = _parse_trainer_details(raw.decode("utf-8", errors="replace"))
             decky.logger.info("Details for %s: %d downloads", slug, len(downloads))
             return {
                 "name": slug,
@@ -148,6 +153,9 @@ class Plugin:
                 exe_path = dest_dir / f"{safe_name}.exe"
                 exe_path.write_bytes(data)
 
+            meta_path = dest_dir / ".flinger_meta.json"
+            meta_path.write_text(json.dumps({"slug": slug, "download_url": download_url}))
+
             decky.logger.info(f"Downloaded trainer to {dest_dir}")
             return {"success": True, "path": str(dest_dir)}
         except Exception as e:
@@ -158,6 +166,23 @@ class Plugin:
         if not TRAINERS_DIR.exists():
             return []
         return [d.name for d in TRAINERS_DIR.iterdir() if d.is_dir()]
+
+    async def get_trainer_meta(self, slug):
+        if not TRAINERS_DIR.exists():
+            return []
+        urls = []
+        for d in TRAINERS_DIR.iterdir():
+            if not d.is_dir():
+                continue
+            meta_path = d / ".flinger_meta.json"
+            if meta_path.exists():
+                try:
+                    meta = json.loads(meta_path.read_text())
+                    if meta.get("slug") == slug:
+                        urls.append(meta.get("download_url", ""))
+                except (json.JSONDecodeError, OSError):
+                    continue
+        return urls
 
     async def delete_trainer(self, name):
         try:
